@@ -47,8 +47,6 @@ def main():
 
                 guardar_precio({
                     "anio": parts["year"],
-                    "semana": parts["week"],
-                    "dia": parts["day"],
                     "fecha": parts["mmddyy"],
                     "tp": tp,
                     "sku": sku,
@@ -59,7 +57,7 @@ def main():
 
                 print(
                     f"OK | {tp} | {sku} | contado={result['price']} | "
-                    f"plazo={result.get('plazo', '')} | pago_plazo={result.get('pago_plazo', '')}"
+                    f"plazo={result.get('plazo', '')} | monto_plazo={result.get('pago_plazo', '')}"
                 )
 
             except Exception as e:

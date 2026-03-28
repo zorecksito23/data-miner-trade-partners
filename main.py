@@ -46,16 +46,16 @@ def main():
                 result = scraper.extract_price(url, keyword)
 
                 guardar_precio({
-                    "anio": parts["year"],
-                    "semana": parts["week"],
-                    "dia": parts["day"],
-                    "fecha": parts["mmddyy"],
-                    "tp": tp,
-                    "sku": sku,
-                    "precioContado": result["price"],
-                    "semanalidad": "N/A",
-                    "plazo": "N/A"
-                })
+    "anio": parts["year"],
+    "semana": parts["week"],
+    "dia": parts["day"],
+    "fecha": parts["mmddyy"],
+    "tp": tp,
+    "sku": sku,
+    "precioContado": result["price"],
+    "plazo": result.get("plazo", ""),
+    "pagoPlazo": result.get("pago_plazo", "")
+})
 
                 print(f"OK | {tp} | {sku} | {result['price']}")
 

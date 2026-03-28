@@ -46,18 +46,21 @@ def main():
                 result = scraper.extract_price(url, keyword)
 
                 guardar_precio({
-    "anio": parts["year"],
-    "semana": parts["week"],
-    "dia": parts["day"],
-    "fecha": parts["mmddyy"],
-    "tp": tp,
-    "sku": sku,
-    "precioContado": result["price"],
-    "plazo": result.get("plazo", ""),
-    "pagoPlazo": result.get("pago_plazo", "")
-})
+                    "anio": parts["year"],
+                    "semana": parts["week"],
+                    "dia": parts["day"],
+                    "fecha": parts["mmddyy"],
+                    "tp": tp,
+                    "sku": sku,
+                    "precioContado": result["price"],
+                    "plazo": result.get("plazo", ""),
+                    "pagoPlazo": result.get("pago_plazo", "")
+                })
 
-                print(f"OK | {tp} | {sku} | {result['price']}")
+                print(
+                    f"OK | {tp} | {sku} | contado={result['price']} | "
+                    f"plazo={result.get('plazo', '')} | pago_plazo={result.get('pago_plazo', '')}"
+                )
 
             except Exception as e:
                 guardar_error({

@@ -1,22 +1,38 @@
-from sheets_client import SheetsClient
+import requests
 from utils import now_parts
 from scrapers.base import build_driver
 from scrapers.homedepot import HomeDepotScraper
+from config import APPS_SCRIPT_URL
+
+def obtener_skus():
+    response = requests.get(f"{APPS_SCRIPT_URL}?action=skus", timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    return data.get("productos", [])
+
+def guardar_precio(payload):
+    response = requests.post(f"{APPS_SCRIPT_URL}?action=price", json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+def guardar_error(payload):
+    response = requests.post(f"{APPS_SCRIPT_URL}?action=error", json=payload, timeout=30)
+    response.raise_for_status()
+    return response.json()
 
 def main():
     print("=== INICIANDO SCRAPER HOME DEPOT ===")
-    sheets = SheetsClient()
-    rows = sheets.get_skus()
+    productos = obtener_skus()
 
     driver = build_driver()
     scraper = HomeDepotScraper(driver)
 
     try:
-        for row in rows:
-            tp = str(row.get("TP", "")).strip()
-            url = str(row.get("URL del Producto", "")).strip()
-            sku = str(row.get("SKU", "")).strip()
-            keyword = str(row.get("PALABRA_VALIDACION", "")).strip()
+        for prod in productos:
+            tp = str(prod.get("tp", "")).strip()
+            url = str(prod.get("url", "")).strip()
+            sku = str(prod.get("sku", "")).strip()
+            keyword = str(prod.get("keyword", "")).strip()
 
             if tp.lower() != "home depot":
                 continue
@@ -29,28 +45,29 @@ def main():
             try:
                 result = scraper.extract_price(url, keyword)
 
-                sheets.append_precio([
-                    parts["year"],
-                    parts["week"],
-                    parts["day"],
-                    parts["mmddyy"],
-                    tp,
-                    sku,
-                    result["price"],
-                    "N/A",
-                    "N/A",
-                ])
+                guardar_precio({
+                    "anio": parts["year"],
+                    "semana": parts["week"],
+                    "dia": parts["day"],
+                    "fecha": parts["mmddyy"],
+                    "tp": tp,
+                    "sku": sku,
+                    "precioContado": result["price"],
+                    "semanalidad": "N/A",
+                    "plazo": "N/A"
+                })
 
                 print(f"OK | {tp} | {sku} | {result['price']}")
 
             except Exception as e:
-                sheets.append_error([
-                    parts["timestamp"],
-                    tp,
-                    sku,
-                    url,
-                    str(e),
-                ])
+                guardar_error({
+                    "fecha": parts["timestamp"],
+                    "tp": tp,
+                    "sku": sku,
+                    "url": url,
+                    "error": str(e)
+                })
+
                 print(f"ERROR | {tp} | {sku} | {e}")
 
     finally:

@@ -1,8 +1,8 @@
 import time
+import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from utils import clean_price
 
 class HomeDepotScraper:
     TP_NAME = "Home Depot"
@@ -10,51 +10,71 @@ class HomeDepotScraper:
     def __init__(self, driver):
         self.driver = driver
 
+    def _clean_price_from_text(self, text):
+        if not text:
+            return None
+
+        normalized = text.replace("\n", " ").replace("\xa0", " ").strip()
+
+        # Busca formatos como 13,299 o 13,299.00
+        match = re.search(r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)', normalized)
+        if not match:
+            return None
+
+        raw = match.group(1).replace(",", "")
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
     def extract_price(self, url, keyword):
         self.driver.get(url)
 
-        wait = WebDriverWait(self.driver, 25)
-        h1 = wait.until(EC.presence_of_element_located((By.TAG_NAME, "h1")))
-        title_text = h1.text.strip()
+        wait = WebDriverWait(self.driver, 30)
+        time.sleep(5)
+
+        # 1. TÍTULO
+        try:
+            title_elem = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#productTitle"))
+            )
+            title_text = title_elem.text.strip()
+        except Exception:
+            title_text = self.driver.title.strip()
 
         if keyword and keyword.lower() not in title_text.lower():
-            raise Exception(f"Validación fallida: '{keyword}' no encontrada en '{title_text}'")
+            raise Exception(
+                f"Validación fallida: '{keyword}' no encontrada en '{title_text}'"
+            )
 
-        time.sleep(3)
+        # 2. PRECIO PUBLICADO
+        price_text = ""
 
-        candidates = []
-        selectors = [
-            "[data-testid*='price']",
-            "[class*='price']",
-            "[class*='Price']",
-            "span",
-            "div",
-        ]
+        # Intento principal: bloque exacto del precio vigente
+        try:
+            price_elem = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#offerPrice"))
+            )
+            price_text = price_elem.text.strip()
+        except Exception:
+            pass
 
-        for selector in selectors:
-            elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-            for el in elements:
-                txt = el.text.strip()
-                css_class = (el.get_attribute("class") or "").lower()
-                if "$" in txt and len(txt) < 40:
-                    candidates.append({"text": txt, "class": css_class})
+        # Intento secundario por si el bloque existe pero el texto viene fragmentado
+        if not price_text:
+            try:
+                container = self.driver.find_element(By.CSS_SELECTOR, "#productPrice")
+                price_text = container.text.strip()
+            except Exception:
+                pass
 
-        valid_prices = []
-        for item in candidates:
-            css_class = item["class"]
-            txt = item["text"]
+        price_value = self._clean_price_from_text(price_text)
 
-            if any(word in css_class for word in ["old", "strike", "list", "before"]):
-                continue
-
-            price = clean_price(txt)
-            if price is not None:
-                valid_prices.append(price)
-
-        if not valid_prices:
-            raise Exception("No se encontró precio publicado válido")
+        if price_value is None:
+            raise Exception(
+                f"No se encontró precio publicado válido. Texto detectado: '{price_text}'"
+            )
 
         return {
             "title": title_text,
-            "price": min(valid_prices),
+            "price": price_value,
         }

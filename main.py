@@ -8,17 +8,31 @@ def obtener_skus():
     response = requests.get(f"{APPS_SCRIPT_URL}?action=skus", timeout=30)
     response.raise_for_status()
     data = response.json()
+
+    if data.get("error"):
+        raise Exception(f"Error obteniendo SKUS: {data['error']}")
+
     return data.get("productos", [])
 
 def guardar_precio(payload):
     response = requests.post(f"{APPS_SCRIPT_URL}?action=price", json=payload, timeout=30)
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+
+    if data.get("error"):
+        raise Exception(f"Error guardando precio: {data['error']}")
+
+    return data
 
 def guardar_error(payload):
     response = requests.post(f"{APPS_SCRIPT_URL}?action=error", json=payload, timeout=30)
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+
+    if data.get("error"):
+        raise Exception(f"Error guardando log: {data['error']}")
+
+    return data
 
 def main():
     print("=== INICIANDO SCRAPER HOME DEPOT ===")
@@ -45,7 +59,7 @@ def main():
             try:
                 result = scraper.extract_price(url, keyword)
 
-                guardar_precio({
+                save_result = guardar_precio({
                     "anio": parts["year"],
                     "fecha": parts["mmddyy"],
                     "tp": tp,
@@ -57,17 +71,21 @@ def main():
 
                 print(
                     f"OK | {tp} | {sku} | contado={result['price']} | "
-                    f"plazo={result.get('plazo', '')} | monto_plazo={result.get('pago_plazo', '')}"
+                    f"plazo={result.get('plazo', '')} | monto_plazo={result.get('pago_plazo', '')} | "
+                    f"guardado={save_result}"
                 )
 
             except Exception as e:
-                guardar_error({
-                    "fecha": parts["timestamp"],
-                    "tp": tp,
-                    "sku": sku,
-                    "url": url,
-                    "error": str(e)
-                })
+                try:
+                    guardar_error({
+                        "fecha": parts["timestamp"],
+                        "tp": tp,
+                        "sku": sku,
+                        "url": url,
+                        "error": str(e)
+                    })
+                except Exception as log_error:
+                    print(f"ERROR GUARDANDO LOG | {tp} | {sku} | {log_error}")
 
                 print(f"ERROR | {tp} | {sku} | {e}")
 

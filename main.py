@@ -1,12 +1,34 @@
+import time
 import requests
+from requests.exceptions import RequestException
 from utils import now_parts
 from scrapers.base import build_driver
 from scrapers.homedepot import HomeDepotScraper
 from config import APPS_SCRIPT_URL
 
+DEFAULT_TIMEOUT = 60
+MAX_RETRIES = 3
+RETRY_SLEEP = 5
+
+def request_with_retry(method, url, **kwargs):
+    last_error = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs)
+            response.raise_for_status()
+            return response
+        except RequestException as e:
+            last_error = e
+            print(f"Intento {attempt}/{MAX_RETRIES} falló para {url}: {e}")
+
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_SLEEP)
+
+    raise last_error
+
 def obtener_skus():
-    response = requests.get(f"{APPS_SCRIPT_URL}?action=skus", timeout=30)
-    response.raise_for_status()
+    response = request_with_retry("GET", f"{APPS_SCRIPT_URL}?action=skus")
     data = response.json()
 
     if data.get("error"):
@@ -15,8 +37,7 @@ def obtener_skus():
     return data.get("productos", [])
 
 def guardar_precio(payload):
-    response = requests.post(f"{APPS_SCRIPT_URL}?action=price", json=payload, timeout=30)
-    response.raise_for_status()
+    response = request_with_retry("POST", f"{APPS_SCRIPT_URL}?action=price", json=payload)
     data = response.json()
 
     if data.get("error"):
@@ -25,8 +46,7 @@ def guardar_precio(payload):
     return data
 
 def guardar_error(payload):
-    response = requests.post(f"{APPS_SCRIPT_URL}?action=error", json=payload, timeout=30)
-    response.raise_for_status()
+    response = request_with_retry("POST", f"{APPS_SCRIPT_URL}?action=error", json=payload)
     data = response.json()
 
     if data.get("error"):

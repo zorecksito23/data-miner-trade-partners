@@ -1,149 +1,56 @@
-import time
-import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import re
 
 class HomeDepotScraper:
-    TP_NAME = "Home Depot"
-
     def __init__(self, driver):
         self.driver = driver
+        self.wait = WebDriverWait(driver, 20)
 
-    def _clean_text(self, value):
-        if not value:
-            return ""
-        return str(value).strip().lower().replace(" ", "")
-
-    def _extract_number(self, text):
+    def _clean_number(self, text):
         if not text:
             return None
+        cleaned = re.sub(r"[^\d.]", "", text)
+        return float(cleaned) if cleaned else None
 
-        normalized = text.replace("\n", " ").replace("\xa0", " ").strip()
-        match = re.search(r'(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)', normalized)
-        if not match:
-            return None
-
-        raw = match.group(1).replace(",", "")
+    def _get_text_if_exists(self, by, selector):
         try:
-            return float(raw)
-        except ValueError:
-            return None
-
-    def _extract_plazo_text(self, text):
-        if not text:
+            el = self.driver.find_element(by, selector)
+            return el.text.strip()
+        except:
             return ""
-
-        normalized = text.replace("\n", " ").replace("\xa0", " ").strip()
-
-        # Busca patrones como 12 MSI, 12 meses, 24 quincenas, 8 semanas
-        patterns = [
-            r'(\d+\s*MSI)',
-            r'(\d+\s*meses?)',
-            r'(\d+\s*quincenas?)',
-            r'(\d+\s*semanas?)',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, normalized, flags=re.IGNORECASE)
-            if match:
-                return match.group(1).strip()
-
-        return normalized
 
     def extract_price(self, url, keyword):
         self.driver.get(url)
 
-        wait = WebDriverWait(self.driver, 30)
-        time.sleep(5)
+        price_el = self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".price-format__main-price"))
+        )
+        price_text = price_el.text.strip()
 
-        title_text = ""
-        model_text = ""
-        price_text = ""
+        plazo_text = self._get_text_if_exists(By.CSS_SELECTOR, ".credit-offer__term")
+        pago_plazo_text = self._get_text_if_exists(By.CSS_SELECTOR, ".credit-offer__amount")
 
-        # Título
-        try:
-            title_elem = wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#productTitle"))
-            )
-            title_text = title_elem.text.strip()
-        except Exception:
-            try:
-                title_text = self.driver.title.strip()
-            except Exception:
-                title_text = ""
+        product_model = self._get_text_if_exists(By.CSS_SELECTOR, "#productModel")
+        product_sku = self._get_text_if_exists(By.CSS_SELECTOR, "#productSku")
 
-        # Modelo
-        try:
-            model_elem = wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#productModel"))
-            )
-            model_text = model_elem.text.strip()
-        except Exception:
-            model_text = ""
+        keyword_norm = (keyword or "").strip().lower()
+        model_norm = product_model.lower()
+        sku_norm = product_sku.lower()
 
-        if keyword:
-            if self._clean_text(keyword) != self._clean_text(model_text):
+        if keyword_norm:
+            found_in_model = keyword_norm in model_norm
+            found_in_sku = keyword_norm in sku_norm
+
+            if not found_in_model and not found_in_sku:
                 raise Exception(
-                    f"Validación fallida: modelo esperado '{keyword}' "
-                    f"pero se encontró '{model_text}'"
+                    f"Validación fallida. '{keyword}' no se encontró ni en productModel='{product_model}' "
+                    f"ni en productSku='{product_sku}'"
                 )
 
-        # Precio contado
-        try:
-            price_elem = wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#offerPrice"))
-            )
-            price_text = price_elem.text.strip()
-        except Exception:
-            pass
-
-        if not price_text:
-            try:
-                container = self.driver.find_element(By.CSS_SELECTOR, "#productPrice")
-                price_text = container.text.strip()
-            except Exception:
-                price_text = ""
-
-        precio_contado = self._extract_number(price_text)
-
-        if precio_contado is None:
-            raise Exception(
-                f"No se encontró precio publicado válido. "
-                f"Texto detectado: '{price_text}' | Modelo detectado: '{model_text}'"
-            )
-
-        # Plazo / pago de plazo
-        pago_plazo = ""
-        plazo = ""
-
-        try:
-            msi_container = self.driver.find_element(By.CSS_SELECTOR, "#openMSIDetail")
-            msi_text = msi_container.text.strip()
-
-            plazo = self._extract_plazo_text(msi_text)
-
-            numbers = re.findall(r'(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)', msi_text)
-            parsed_numbers = []
-            for n in numbers:
-                try:
-                    parsed_numbers.append(float(n.replace(",", "")))
-                except:
-                    pass
-
-            # Elegimos el primer número decimal/chico que no sea el precio contado
-            for n in parsed_numbers:
-                if abs(n - precio_contado) > 1:
-                    pago_plazo = n
-                    break
-
-        except Exception:
-            pass
-
         return {
-            "title": title_text,
-            "model": model_text,
-            "price": precio_contado,
-            "plazo": plazo,
-            "pago_plazo": pago_plazo,
+            "price": self._clean_number(price_text),
+            "plazo": plazo_text,
+            "pago_plazo": self._clean_number(pago_plazo_text)
         }

@@ -124,18 +124,20 @@ def main():
                 )
 
             except Exception as e:
+                error_msg = f"{type(e).__name__}: {e}"
+
                 try:
                     guardar_error({
                         "fecha": parts["timestamp"],
                         "tp": tp,
                         "sku": sku,
                         "url": url,
-                        "error": str(e)
+                        "error": error_msg
                     })
                 except Exception as log_error:
                     print(f"ERROR GUARDANDO LOG | {tp} | {sku} | {log_error}", flush=True)
 
-                print(f"ERROR | {tp} | {sku} | {e}", flush=True)
+                print(f"ERROR | {tp} | {sku} | {error_msg}", flush=True)
 
     finally:
         print("[STEP] Cerrando driver...", flush=True)

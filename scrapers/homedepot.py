@@ -6,13 +6,16 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 class HomeDepotScraper:
-    def __init__(self, driver, timeout=25):
+    def __init__(self, driver, timeout=90):
         self.driver = driver
         self.wait = WebDriverWait(driver, timeout)
 
-    def _wait_and_get_text(self, selector):
+    def _wait_and_get_text(self, selector, timeout=None):
         try:
-            el = self.wait.until(
+            wait = WebDriverWait(self.driver, timeout or 90)
+
+            print(f"[HD] Esperando selector: {selector}", flush=True)
+            el = wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, selector))
             )
 
@@ -25,7 +28,7 @@ class HomeDepotScraper:
             print(f"[HD] Texto encontrado en {selector}: {text}", flush=True)
             return text
         except Exception as e:
-            print(f"[HD] No se pudo obtener texto en {selector}: {type(e).__name__}: {e}", flush=True)
+            print(f"[HD] Error leyendo {selector}: {type(e).__name__}: {e}", flush=True)
             return ""
 
     def _extract_digits(self, text):
@@ -41,31 +44,31 @@ class HomeDepotScraper:
             return None
 
     def _extract_precio_contado(self):
-        # Entero del precio: span dentro de #offerPrice
-        entero_text = self._wait_and_get_text("#offerPrice span")
+        # Selector exacto que me mostraste
+        entero_text = self._wait_and_get_text("#offerPrice span", timeout=120)
         if not entero_text:
             raise Exception("No se encontró el precio contado en #offerPrice span")
-
-        print(f"[HD] Texto bruto precio contado: {entero_text}", flush=True)
 
         nums = self._extract_digits(entero_text)
         if not nums:
             raise Exception(f"No se pudo parsear el precio contado desde: '{entero_text}'")
 
-        return self._to_float(nums[0])
+        precio = self._to_float(nums[0])
+        if precio is None:
+            raise Exception(f"No se pudo convertir a número el precio contado: '{entero_text}'")
+
+        return precio
 
     def _extract_msi(self):
-        text = self._wait_and_get_text("#openMSIDetail")
+        text = self._wait_and_get_text("#openMSIDetail", timeout=120)
         print(f"[HD] Texto bruto MSI: {text}", flush=True)
 
         if not text:
             return "", None
 
-        # monto del plazo = primer número del bloque
         nums = self._extract_digits(text)
         pago_plazo = self._to_float(nums[0]) if len(nums) >= 1 else None
 
-        # plazo = número antes de MSI
         plazo_match = re.search(r"(\d+)\s*MSI", text, re.IGNORECASE)
         plazo = f"{plazo_match.group(1)} MSI" if plazo_match else ""
 
@@ -82,15 +85,17 @@ class HomeDepotScraper:
 
             print(f"[HD] Texto encontrado en {selector}: {text}", flush=True)
             return text
-        except Exception:
-            print(f"[HD] No se encontró texto en {selector}", flush=True)
+        except Exception as e:
+            print(f"[HD] No se encontró texto en {selector}: {type(e).__name__}: {e}", flush=True)
             return ""
 
     def extract_price(self, url, keyword):
         try:
             print(f"[HD] Abriendo URL: {url}", flush=True)
             self.driver.get(url)
-            time.sleep(4)
+
+            # Espera adicional para páginas pesadas
+            time.sleep(8)
 
             precio_contado = self._extract_precio_contado()
             print(f"[HD] Precio contado extraído: {precio_contado}", flush=True)
